@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+	<channel>
+		<title>Altirra update feed (test channel)</title>
+		<link>https://forums.atariage.com/topic/327133-altirra-400-released/</link>
+		<description>Automatic update notifications for test versions of the Altirra emulator, used by the Check for Updates feature in the program.</description>
+		<item>
+			<title>Altirra 4.10-test25 (4.10.125.15651; win7; sse2)</title>
+			<description>
+				<ul>
+<li>Fixes stale line number information in source windows when reloading symbols</li>
+				</ul>
+			</description>
+   			<link>https://forums.atariage.com/topic/327133-altirra-400-released/?do=findComment&amp;comment=5158862</link>
+			<pubDate>
+				now
+			</pubDate>
+			<category>release</category>
+		</item>
+	</channel>
+</rss>

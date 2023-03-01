@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.40219.1</_ProjectFileVersion>
+    <CodeAnalysisRuleSet>..\Build\Altirra.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="VCDisableTelemetry.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros">
+    <VDBaseDir>$(MSBuildThisFileDirectory)..\..</VDBaseDir>
+    <VDPlatformDirTag Condition="$(Platform)=='x86'"></VDPlatformDirTag>
+    <VDPlatformDirTag Condition="$(Platform)=='x64'">AMD64</VDPlatformDirTag>
+    <VDPlatformDirTag Condition="$(Platform)=='ARM64'">ARM64</VDPlatformDirTag>
+    <VDConfigDirTag>Unknown</VDConfigDirTag>
+    <VDConfigDirTag Condition="$(Configuration)=='Debug'">Debug</VDConfigDirTag>
+    <VDConfigDirTag Condition="$(Configuration)=='Profile'">Profile</VDConfigDirTag>
+    <VDConfigDirTag Condition="$(Configuration)=='Analysis'">Analysis</VDConfigDirTag>
+    <VDConfigDirTag Condition="$(Configuration)=='Release'">Release</VDConfigDirTag>
+    <VDToolsConfigDirTag>Release</VDToolsConfigDirTag>
+    <VDDirTag>$(VDConfigDirTag)$(VDPlatformDirTag)</VDDirTag>
+    <VDLibPath>$(VDBaseDir)\lib\$(VDDirTag)</VDLibPath>
+    <VDOutputPath>$(VDBaseDir)\out\$(VDDirTag)</VDOutputPath>
+    <VDObjPath>$(VDBaseDir)\obj\$(VDDirTag)\$(ProjectName)</VDObjPath>
+    <ML Condition="$(Platform)=='x64'">/Dxmmword=qword</ML>
+
+    <!-- For now, always use Release x86 tools. The 6502 projects don't have a full set of configs and can't match configurations. -->
+    <ATBuildToolConfig>Release</ATBuildToolConfig>
+
+    <!-- Use the same platform as the build, except for ARM64 where we cross-compile and use X64 tools instead. -->
+    <ATBuildToolPath Condition="'$(Platform)'!='ARM64'">$(VDBaseDir)\out\$(ATBuildToolConfig)</ATBuildToolPath>
+    <ATBuildToolPath Condition="'$(Platform)'=='ARM64'">$(VDBaseDir)\out\$(ATBuildToolConfig)AMD64</ATBuildToolPath>
+
+    <ATLibPath>$(VDLibPath)</ATLibPath>
+    <ATObjPath>$(VDObjPath)</ATObjPath>
+    <ATOutPath>$(VDOutputPath)</ATOutPath>
+    <ATMadsPath>mads.exe</ATMadsPath>
+    <XPDeprecationWarning>False</XPDeprecationWarning>
+
+    <!-- Set to True to enable the Undefined Behavior Sanitizer (Clang only) -->
+    <ATEnableUBsan>False</ATEnableUBsan>
+
+    <!-- Set to True to enable the Undefined Behavior Sanitizer (Clang only; MSVC's version barfs on static CRT right now) -->
+    <ATEnableAsan>False</ATEnableAsan>
+    
+    <!-- Set to True to enable Control Flow Guard. This isn't recommended for release due to performance and compatibility issues,
+         but it does work. -->
+    <ATEnableCFG>False</ATEnableCFG>
+  </PropertyGroup>
+  <ItemGroup>
+    <BuildMacro Include="ATBuildToolPath">
+      <Value>$(ATBuildToolPath)</Value>
+    </BuildMacro>
+    <BuildMacro Include="ATMadsPath">
+      <Value>$(ATMadsPath)</Value>
+    </BuildMacro>
+    <PropertyPageSchema Include="$(MSBuildThisFileDirectory)Altirra.xml">
+      <Context>Project</Context>
+    </PropertyPageSchema>
+  </ItemGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>h;$([MSBuild]::MakeRelative($(ProjectDir),$(MSBuildThisFileDirectory)..\h));autogen;res;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      
+      <!--
+        warning as error C4834: discarding return value of function with 'nodiscard' attribute
+      -->
+      <AdditionalOptions>%(AdditionalOptions) /Zc:inline /Zc:externConstexpr /permissive- /we4834</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Configuration)'!='Debug'">%(AdditionalOptions) /Zo</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Configuration)'=='Analysis'">%(AdditionalOptions) /analyze:rulesetdirectory "$(VSInstallDir)Team Tools\Static Analysis Tools\Rule Sets" /analyze:ruleset "$(MSBuildThisFileDirectory)Altirra.ruleset"</AdditionalOptions>
+
+      <!--
+        For Clang builds, cut down on the noise a bit.
+
+        -Wno-nonportable-include-path: TODO because Windows builds are case insensitive, and Perforce has some problems changing case.
+        -Wno-switch: This collides with the current convention of having k*Count members, which are not actual valid values.
+        -Wno-parentheses: Cleanup TODO, too many right now.
+        -Wno-inconsistent-missing-override: Cleanup TODO, too many right now.
+        -Wno-missing-braces: Too much noise for insufficient benefit.
+        -Wno-reorder: Cleanup TODO, too much noise right now.
+        -Wno-unused-variable: Cleanup TODO, too much noise right now.
+        -Wno-unused-private-field: Cleanup TODO, too much noise right now.
+      -->
+      <AdditionalOptions Condition="'$(PlatformToolset)'=='llvm'">
+        %(AdditionalOptions)
+        -Wno-nonportable-include-path
+        -Wno-switch
+        -Wno-parentheses
+        -Wno-inconsistent-missing-override
+        -Wno-missing-braces
+        -Wno-reorder
+        -Wno-unused-variable
+        -Wno-unused-private-field
+      </AdditionalOptions>
+      <AdditionalOptions Condition="'$(PlatformToolset)'=='llvm' and $(ATEnableUBsan)">%(AdditionalOptions) -fsanitize=undefined</AdditionalOptions>
+      <AdditionalOptions Condition="'$(PlatformToolset)'=='llvm' and $(ATEnableAsan)">%(AdditionalOptions) -fsanitize=address</AdditionalOptions>
+
+      <BasicRuntimeChecks Condition="'$(Configuration)'=='Debug'">EnableFastChecks</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <CallingConvention Condition="'$(Platform)'!='ARM64'">VectorCall</CallingConvention>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+
+      <!--
+        warning C4100: 'foo': unreferenced formal parameter
+        warning C4127: conditional expression is constant
+          - difficulties when non-type template arguments are used to gate runtime conditionals
+        warning C4245: 'argument': conversion from 'foo' to 'bar', signed/unsigned mismatch
+        warning C4310: cast truncates constant value
+          - as intended
+        warning C4324: 'foo': structure was padded due to alignment specifier
+          - as intended
+        warning C4389: '==': signed/unsigned mismatch
+        warning C4456: declaration of 'foo' hides previous local declaration
+        warning C4457: declaration of 'foo' hides function parameter
+        warning C4701: potentially uninitialized local variable 'foo' used
+        warning C4702: unreachable code
+          - currently produces hard to resolve warnings around VDNEVERHERE portable safeguards
+        warning C4706: assignment within conditional expression
+          - difficulties suppressing portably
+      -->
+      <DisableSpecificWarnings>4100;4127;4245;4310;4324;4389;4456;4457;4701;4702;4706;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <DisableSpecificWarnings Condition="$(Platform)!='x86'">4244;4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <DisableSpecificWarnings Condition="$(Platform)=='ARM64'">4164;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <EnableEnhancedInstructionSet Condition="$(Platform)=='x86'">StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <InlineFunctionExpansion Condition="'$(Configuration)'!='Debug'">AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MinimalRebuild>false</MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization Condition="'$(Configuration)'=='Debug'">Disabled</Optimization>
+      <Optimization Condition="'$(Configuration)'!='Debug'">Full</Optimization>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
+      <PreprocessorDefinitions>WIN32;_WIN32;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;NOMINMAX;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_DEPRECATE;_SECURE_SCL=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)'=='Debug'">_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)'!='Debug'">NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)'!='Release'">ATNRELEASE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(ConfigurationType)'=='StaticLibrary'">_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary Condition="'$(Configuration)'!='Debug'">MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <StringPooling>true</StringPooling>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <WarningLevel>Level4</WarningLevel>
+      <SupportJustMyCode>false</SupportJustMyCode>
+
+      <AdditionalOptions Condition="$(ATEnableCFG)">%(AdditionalOptions) /guard:cf</AdditionalOptions>
+    </ClCompile>
+    <Lib>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TargetMachine Condition="'$(Platform)'=='Win32'">MachineX86</TargetMachine>
+      <TargetMachine Condition="'$(Platform)'=='x86'">MachineX86</TargetMachine>
+      <TargetMachine Condition="'$(Platform)'=='x64'">MachineX64</TargetMachine>
+      <TargetMachine Condition="'$(Platform)'=='ARM64'">MachineARM64</TargetMachine>
+    </Lib>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <TargetMachine Condition="'$(Platform)'=='Win32'">MachineX86</TargetMachine>
+      <TargetMachine Condition="'$(Platform)'=='x86'">MachineX86</TargetMachine>
+      <TargetMachine Condition="'$(Platform)'=='x64'">MachineX64</TargetMachine>
+      <TargetMachine Condition="'$(Platform)'=='ARM64'">MachineARM64</TargetMachine>
+      <OptimizeReferences Condition="'$(Configuration)'!='Debug'">true</OptimizeReferences>
+      <EnableCOMDATFolding Condition="'$(Configuration)'!='Debug'">true</EnableCOMDATFolding>
+
+      <AdditionalLibraryDirectories Condition="$(ATLinkUseLibPath)">%(AdditionalLibraryDirectories);$(ATLibPath)</AdditionalLibraryDirectories>
+
+      <!--
+        This is needed to fix __powidf2 link errors. We can't use the normal clang-cl switch to enable compiler-rt because clang-cl
+        is not driving the link.
+      -->
+      <AdditionalDependencies Condition="'$(PlatformToolset)'=='llvm'">%(AdditionalDependencies);$(LLVMInstallDir)lib\clang\9.0.0\lib\windows\clang_rt.builtins-x86_64.lib</AdditionalDependencies>
+      
+      <AdditionalOptions Condition="$(ATEnableCFG)">%(AdditionalOptions) /guard:cf</AdditionalOptions>
+    </Link>
+    <ResourceCompile>
+      <PreprocessorDefinitions Condition="'$(Configuration)'!='Debug'">NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)'=='Debug'">_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">ATRES_X86;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='x86'">ATRES_X86;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">ATRES_X64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='ARM64'">ATRES_ARM64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0409</Culture>
+    </ResourceCompile>
+    <MASM>
+      <UseSafeExceptionHandlers Condition="'$(Platform)'=='Win32'">true</UseSafeExceptionHandlers>
+    </MASM>
+  </ItemDefinitionGroup>
+  <PropertyGroup Condition="$(ATUseOutputPaths)">
+    <IntDir>$(ATObjPath)\</IntDir>
+    <OutDir Condition="'$(ConfigurationType)'=='StaticLibrary'">$(ATLibPath)\</OutDir>
+    <OutDir Condition="'$(ConfigurationType)'!='StaticLibrary'">$(ATOutPath)\</OutDir>
+  </PropertyGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Condition="Exists('$(MSBuildThisFileDirectory)..\..\localconfig\active\Altirra.local.props')" Project="$(MSBuildThisFileDirectory)..\..\localconfig\active\Altirra.local.props" />
+  </ImportGroup>
+  <ItemGroup>
+    <BuildMacro Include="VDBaseDir">
+      <Value>$(VDBaseDir)</Value>
+    </BuildMacro>
+    <BuildMacro Include="VDDirTag">
+      <Value>$(VDDirTag)</Value>
+    </BuildMacro>
+    <BuildMacro Include="VDLibPath">
+      <Value>$(VDLibPath)</Value>
+    </BuildMacro>
+    <BuildMacro Include="VDOutputPath">
+      <Value>$(VDOutputPath)</Value>
+    </BuildMacro>
+    <BuildMacro Include="VDObjPath">
+      <Value>$(VDObjPath)</Value>
+    </BuildMacro>
+    <BuildMacro Include="VDPlatformDirTag">
+      <Value>$(VDPlatformDirTag)</Value>
+    </BuildMacro>
+    <BuildMacro Include="VDConfigDirTag">
+      <Value>$(VDConfigDirTag)</Value>
+    </BuildMacro>
+    <BuildMacro Include="ML" Condition="$(Platform)=='x64'">
+      <Value>$(ML)</Value>
+      <EnvironmentVariable>true</EnvironmentVariable>
+    </BuildMacro>
+  </ItemGroup>
+</Project>
